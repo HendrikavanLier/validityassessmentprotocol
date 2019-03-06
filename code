@@ -1,0 +1,85 @@
+  
+  #### Inlezen data ####
+  mat_RD=readMat(*.mat)  # Inlezen matlab file Ledalab RD (downsample to 16Hz with Ledalab)
+  mat_RD_scrlist=readMat(*scrlist.mat)  # Inlezen matlab scrlist Ledalab RD (downsample to 16Hz with Ledalab)
+  mat_E4=readMat(*.mat)  # Inlezen matlab file Ledalab E4
+  mat_E4_scrlist=readMat(*scrlist.mat)  # Inlezen matlab scrlist Ledalab E4
+
+  #### Start and end RD ####
+  start_RD=start_time     # The start neutral sentences SSST (in sec)
+  end_RD=end_time         # Stop baseline after noisetask (in sec)
+  start_E4=start_time     # The start neutral sentences SSST (in sec)
+  end_E4=end_time         # Stop baseline after noisetask (in sec)
+  
+  #### Retrieve conductance ####
+  conductance_RD=mat_RD$data[1,1,1]$conductance[1,(start_RD*16):(end_RD*16)]
+  event_RD=as.numeric(mat_RD$data[4,1,1]$event[1,,])
+  time_RD=mat_RD$data[2,1,1]$time[1,mat_RD$data[2,1,1]$time>=start_RD&mat_RD$data[2,1,1]$time<=end_RD]
+  
+  conductance_E4=mat_E4$data[1,1,1]$conductance[1,(start_E4*4):(end_E4*4)]
+  event_E4=as.numeric(mat_E4$data[4,1,1]$event[1,,])
+  time_E4=mat_E4$data[2,1,1]$time[1,mat_E4$data[2,1,1]$time>=start_E4&mat_E4$data[2,1,1]$time<=end_E4]
+  
+  ##### Upsample the E4_data to 
+  conductance_E4_16=rep(conductance_E4,each=4)
+  time_E4_16=rep(time_E4,each=4)
+  
+  ##### Detrenden data #####
+  sc_da_E4_d=diff(conductance_E4_16)
+  sc_da_RD_d=diff(conductance_RD)
+  
+  #### Crosscorrelation ####
+  br=ccf(as.numeric(sc_da_RD_d),
+         as.numeric(sc_da_E4_d),
+         lag.max = 8, plot=F,
+         main=paste("Participant",ii))
+  
+  cccf[which(ii==II),]=
+    cbind(ii,br$lag[which(br$acf==max(br$acf))],max(br$acf))
+    
+  ccf=as.data.frame(cccf)
+  colnames(ccf)<- c("ID","lag","coefficient")
+
+  barplot(c(sum(ccf$coefficient>.10&ccf$coefficient<.20)/56*100,sum(ccf$coefficient>.20&ccf$coefficient<.30)/56*100,sum(ccf$coefficient>.30&ccf$coefficient<.40)/56*100,
+          sum(ccf$coefficient>.40&ccf$coefficient<.50)/56*100,sum(ccf$coefficient>.50&ccf$coefficient<.60)/56*100,sum(ccf$coefficient>.60&ccf$coefficient<.70)/56*100,
+          sum(ccf$coefficient>.70&ccf$coefficient<.80)/56*100,sum(ccf$coefficient>.80&ccf$coefficient<.90)/56*100,sum(ccf$coefficient>.90)/56*100),
+        names.arg=c(">.10",">.20", ">.30",">.40", ">.50", ">.60", ">.70", ">.80",">.90"),ylim=c(0,100),
+        xlab="Cross correlation coefficient",col=grey.colors(9)) #,col=heat.colors(9))
+  
+  #### Bland Altman plot ####
+  ggplot(data,aes(x=Mean,y=diff)) +
+  geom_point(shape=19,size=4,alpha=.5)+
+  #labs(title="Bland Altman SCLevel")+
+  labs(x="Mean (E4,RD)",y="Difference (E4 - RD)")+
+  theme_bw()+
+  theme(axis.text=element_text(size=16),
+        axis.title = element_text(size=20),
+        title=element_text(size=16,face="bold"),
+        axis.title.y=element_text(margin=margin(0,20,0,0)),
+        axis.title.x=element_text(margin=margin(20,0,0,0)),
+        legend.title = element_text(size=18, face="bold"),
+        legend.text = element_text(size = 16),
+        #legend.position="top",
+        legend.justification=c(0.03,0.97), legend.position=c(0.03,0.97))+
+  geom_hline(aes(yintercept=mean(diff)),
+             col="blue")+
+  geom_hline(aes(yintercept=mean(diff)+sd(diff)*1.96),
+             col="red")+
+  geom_hline(aes(yintercept=mean(diff)-sd(diff)*1.96),
+             col="red")+
+  geom_text(aes(y=mean(diff,na.rm = T)+sd(diff,na.rm = T)*1.96+.1, 
+                label=paste("Upper bound =",round(mean(diff,na.rm = T)+sd(diff,na.rm = T)*1.96,2)),
+                x=1.5),cex=5,col="black")+
+  geom_text(aes(y=mean(diff,na.rm = T)-sd(diff,na.rm = T)*1.96-.1, 
+                label=paste("Lower bound =",round(mean(diff,na.rm = T)-sd(diff,na.rm = T)*1.96,2)),
+                x=1.5),cex=5,col="black")+
+  geom_text(aes(y=-3.2, 
+                label=paste(round((56-(sum(data$diff>0.28)+sum(data$diff<c(-0.28))))/56*100,0),"% of the data lies inside of the boudaries."),
+                x=0.5),cex=5,col="black")+
+  geom_hline(aes(yintercept=0.28),
+             col="green")+
+  geom_hline(aes(yintercept=-0.28),
+             col="green")
+  
+    
+    
